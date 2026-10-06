@@ -1,0 +1,9 @@
+node_modules/
+.env
+session_data/
+
+# managed
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed
