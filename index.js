@@ -180,6 +180,24 @@ async function handleMessage(client, message) {
     return;
   }
 
+    // ---- Fadel ----
+  if (body === `${prefix}fadel`) {
+    await client.sendMessage(chatId, 'kepala suku');
+    return;
+  }
+
+      // ---- Fardan ----
+  if (body === `${prefix}fardan`) {
+    await client.sendMessage(chatId, 'haloo guys, bentar kita meeting progress artikel yaa');
+    return;
+  }
+
+  // ---- Miftah ----
+  if (body === `${prefix}miftah`) {
+    await client.sendMessage(chatId, 'Alumni Machida');
+    return;
+  }
+
     // ---- Gina ----
   if (body === `${prefix}gina`) {
     await client.sendMessage(chatId, 'machida bot');
@@ -201,6 +219,24 @@ async function handleMessage(client, message) {
   // ---- Om sukron ----
   if (body === `${prefix}sukron`) {
     await client.sendMessage(chatId, 'om sukron');
+    return;
+  }
+
+   // ---- Pak jumadi ----
+  if (body === `${prefix}Jumadi`) {
+    await client.sendMessage(chatId, 'Enak ji perasaan ta hari ini?');
+    return;
+  }
+
+  // ---- Pak Wahid ----
+  if (body === `${prefix}Wahid`) {
+    await client.sendMessage(chatId, 'Info progress artikelnya suda sampai mana?');
+    return;
+  }
+
+  // ---- Pak Syahid ----
+  if (body === `${prefix}Syahid`) {
+    await client.sendMessage(chatId, 'Oleh-oleh');
     return;
   }
 
