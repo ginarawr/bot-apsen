@@ -1,0 +1,15 @@
+services:
+  bot-apsen:
+    build: .
+    container_name: bot-apsen
+    restart: unless-stopped
+    init: true          # reap zombie Chromium processes
+    shm_size: 1gb       # Chromium needs more than Docker's default 64MB /dev/shm
+    env_file: .env
+    volumes:
+      - wwebjs_auth:/app/.wwebjs_auth
+      - wwebjs_cache:/app/.wwebjs_cache
+
+volumes:
+  wwebjs_auth:
+  wwebjs_cache:

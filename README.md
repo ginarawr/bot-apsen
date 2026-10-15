@@ -11,6 +11,9 @@ bot-apsen/
 ├── package.json
 ├── .env.example              # Template environment variables
 ├── .gitignore
+├── Dockerfile                # Image Docker (Node 20 + Chromium)
+├── docker-compose.yml        # Konfigurasi Docker Compose
+├── .dockerignore
 ├── helpers/
 │   └── spreadsheet.js        # Helper CRUD Google Spreadsheet
 └── modules/
@@ -53,6 +56,38 @@ BOT_PREFIX=!
 npm start
 ```
 Scan QR Code yang muncul dengan WhatsApp.
+
+## 🐳 Menjalankan dengan Docker
+
+Alternatif dari langkah 1 & 4 di atas — tidak perlu install Node.js maupun Chrome, cukup [Docker](https://docs.docker.com/get-docker/).
+
+### 1. Siapkan `.env`
+Lakukan langkah **Setup Google Spreadsheet** dan **Setup Environment Variables** di atas, sehingga file `.env` sudah terisi.
+
+### 2. Build & jalankan container
+```bash
+docker compose up -d --build
+```
+
+### 3. Scan QR Code
+QR Code muncul di log container:
+```bash
+docker compose logs -f bot-apsen
+```
+Scan dengan WhatsApp, lalu tekan `Ctrl+C` untuk keluar dari log (bot tetap berjalan).
+
+Sesi login disimpan di volume Docker (`wwebjs_auth`), jadi tidak perlu scan ulang setiap restart.
+
+### Perintah Docker lainnya
+| Perintah                                   | Fungsi                                          |
+| ------------------------------------------ | ----------------------------------------------- |
+| `docker compose ps`                        | Cek status container                            |
+| `docker compose logs -f bot-apsen`         | Lihat log bot secara live                       |
+| `docker compose restart`                   | Restart bot                                     |
+| `docker compose stop`                      | Hentikan bot                                    |
+| `docker compose up -d --build`             | Rebuild & jalankan ulang setelah ada perubahan kode |
+| `docker compose down`                      | Hapus container (sesi login tetap tersimpan)    |
+| `docker compose down -v`                   | Hapus container **dan** sesi login (perlu scan QR ulang) |
 
 ## 📌 Daftar Perintah
 
