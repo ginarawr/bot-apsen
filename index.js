@@ -40,12 +40,21 @@ client.on('ready', async () => {
 ║     BOT APSEN - WhatsApp Bot     ║
 ║   Powered by whatsapp-web.js     ║
 ╚══════════════════════════════════╝`);
-  // Hubungkan ke Google Spreadsheet
+  // Hubungkan ke Google Spreadsheet (opsional)
   try {
     await initSpreadsheet();
     console.log('[Bot] Spreadsheet berhasil terhubung!');
   } catch (e) {
-    console.error('[Bot] Gagal terhubung ke Spreadsheet:', e.message);
+    console.warn('[Bot] Catatan Spreadsheet:', e.message);
+  }
+
+  // Verifikasi koneksi Notion
+  try {
+    const notionHelper = require('./helpers/notion');
+    const groups = await notionHelper.listAllGroups();
+    console.log(`[Bot] Notion berhasil terhubung! (${groups.length} grup di database)`);
+  } catch (e) {
+    console.warn('[Bot] Catatan Notion:', e.message);
   }
 
   console.log(`[Bot] Bot siap! Prefix: ${prefix}`);
@@ -202,7 +211,7 @@ async function handleMessage(client, message) {
     return;
   }
 
-  // ---- MODUL TODO LIST ----
+  // ---- MODUL TODO LIST & PROGRESS NOTION ----
   const todoCmds = [
     `${prefix}list`,
     `${prefix}task_list`,
@@ -212,6 +221,13 @@ async function handleMessage(client, message) {
     `${prefix}remove_task`,
     `${prefix}edit`,
     `${prefix}edit_task`,
+    `${prefix}done`,
+    `${prefix}complete`,
+    `${prefix}undone`,
+    `${prefix}incomplete`,
+    `${prefix}progress`,
+    `${prefix}report`,
+    `${prefix}q`,
   ];
   if (todoCmds.some((c) => body === c || body.startsWith(`${c} `) || body.startsWith(`${c}\n`))) {
     await todolist.handleCommand(client, message, isRegistered, chatId, isGroup);
@@ -223,7 +239,7 @@ async function handleMessage(client, message) {
    Generate teks menu utama dinamis
 ------------------------------------------------------------------- */
 function generateMenu(prefix, isBotOwner = false) {
-  let menu = '🤖 *BOT APSEN — MENU UTAMA*\n';
+  let menu = '🤖 *BOT APSEN — MENU UTAMA (NOTION INTEGRATED)*\n';
   menu += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
   
   if (isBotOwner) {
@@ -234,6 +250,7 @@ function generateMenu(prefix, isBotOwner = false) {
   menu += '━━━━━━━━━━━━━━━━━━━━━━\n';
   menu += `💡 Ketik *${prefix}menu* untuk melihat menu lagi.\n`;
   menu += `💡 Ketik *${prefix}add template* atau *${prefix}edit template* untuk contoh cepat.\n`;
-  menu += '⚠️ Grup harus *terdaftar* terlebih dahulu untuk menggunakan fitur TodoList.';
+  menu += `💡 Ketik *${prefix}progress* atau *${prefix}q gimana progress Tim?* untuk laporan tim.\n`;
+  menu += '⚠️ Grup harus *terdaftar & berstatus Diizinkan* di Notion untuk menggunakan fitur bot.';
   return menu;
 }
