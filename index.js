@@ -39,6 +39,26 @@ function removeStaleChromiumLocks(dir) {
 removeStaleChromiumLocks(path.resolve('.wwebjs_auth'));
 
 /* ------------------------------------------------------------------
+   Cek profil sesi WhatsApp sebelum start.
+   LocalAuth menyimpan sesi di .wwebjs_auth/session (Chromium userDataDir).
+   Kalau folder itu hilang/kosong (volume tidak ter-mount, atau kena
+   `docker compose down -v`), bot pasti menampilkan QR untuk pairing baru -
+   log ini membuat penyebabnya langsung kelihatan.
+------------------------------------------------------------------- */
+function logSessionStatus() {
+  const sessionDir = path.resolve('.wwebjs_auth/session');
+  const hasProfile = fs.existsSync(path.join(sessionDir, 'Default'));
+  if (hasProfile) {
+    console.log(`[Bot] Profil sesi ditemukan di ${sessionDir}`);
+  } else {
+    console.warn(
+      `[Bot] Profil sesi TIDAK ADA di ${sessionDir} — QR akan muncul untuk pairing baru.\n` +
+        `[Bot] Cek volume .wwebjs_auth masih ter-mount dan jangan pakai \`docker compose down -v\`.`
+    );
+  }
+}
+
+/* ------------------------------------------------------------------
    Inisialisasi client WhatsApp
    - `LocalAuth` menyimpan sesi di folder ./session-data
    - QR‑code ditampilkan di terminal via qrcode‑terminal
@@ -109,6 +129,7 @@ client.on('disconnected', (reason) => {
   console.warn('[Bot] ⚠️ Bot terputus:', reason);
 });
 
+logSessionStatus();
 console.log('[Bot] Memulai inisialisasi... (harap tunggu 30-60 detik)');
 client.initialize();
 
