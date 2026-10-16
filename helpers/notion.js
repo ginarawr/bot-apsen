@@ -28,9 +28,28 @@ async function getDatabaseSchema(databaseId) {
   if (schemaCache[databaseId]) return schemaCache[databaseId];
 
   const notion = getNotionClient();
-  const db = await notion.databases.retrieve({ database_id: databaseId });
+  const db = await notion.dataSources.retrieve({ data_source_id: databaseId });
   schemaCache[databaseId] = db.properties;
   return db.properties;
+}
+
+/**
+ * Query seluruh halaman dari data source (otomatis mengikuti pagination, maks 100 per request)
+ */
+async function queryAllPages(dataSourceId, params = {}) {
+  const notion = getNotionClient();
+  const results = [];
+  let cursor;
+  do {
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      start_cursor: cursor,
+      ...params,
+    });
+    results.push(...response.results);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+  return results;
 }
 
 /**
@@ -133,15 +152,13 @@ async function queryGroups() {
   const dbId = config.NOTION_GROUPS_DATA_SOURCE_ID;
   const schema = await getDatabaseSchema(dbId);
 
-  const response = await notion.databases.query({
-    database_id: dbId,
-  });
+  const pages = await queryAllPages(dbId);
 
   const idKey = findPropKey(schema, [/id.*grup/i, /group.*id/i, /whatsapp/i], 'rich_text') || 'ID Grup WhatsApp';
   const nameKey = findPropKey(schema, [/nama.*grup/i, /nama/i, /name/i, /group/i], 'title') || 'Nama Grup';
   const accessKey = findPropKey(schema, [/akses.*bot/i, /akses/i, /status/i], 'select') || 'Akses Bot';
 
-  return response.results.map((p) => {
+  return pages.map((p) => {
     const rec = pageToRecord(p);
     return {
       pageId: p.id,
@@ -221,7 +238,7 @@ async function registerGroup(groupId, groupName) {
   }
 
   await notion.pages.create({
-    parent: { database_id: dbId },
+    parent: { data_source_id: dbId },
     properties: propertiesPayload,
   });
 
@@ -281,13 +298,12 @@ async function getTasksByGroup(groupId) {
   const prioKey = findPropKey(schema, [/prioritas/i, /priority/i, /prio/i], 'select') || 'Prioritas';
   const statusKey = findPropKey(schema, [/status/i], 'status') || 'Status';
 
-  const response = await notion.databases.query({
-    database_id: dbId,
+  const pages = await queryAllPages(dbId, {
     sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
   });
 
   const tasks = [];
-  for (const p of response.results) {
+  for (const p of pages) {
     const rec = pageToRecord(p);
     const taskGroupId = rec[groupKey] || (p.properties[groupKey] ? extractPropValue(p.properties[groupKey]) : '');
 
@@ -350,7 +366,7 @@ async function addTask(groupId, taskName, description, priority) {
   }
 
   const response = await notion.pages.create({
-    parent: { database_id: dbId },
+    parent: { data_source_id: dbId },
     properties: propertiesPayload,
   });
 
