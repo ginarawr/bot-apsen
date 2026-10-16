@@ -2,6 +2,7 @@ services:
   bot-apsen:
     build: .
     container_name: bot-apsen
+    hostname: bot-apsen # hostname tetap agar lock profil Chromium tidak dianggap milik "komputer lain"
     restart: unless-stopped
     init: true          # reap zombie Chromium processes
     shm_size: 1gb       # Chromium needs more than Docker's default 64MB /dev/shm

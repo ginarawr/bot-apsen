@@ -1,6 +1,8 @@
 // ---------------------------------------------------------------
 //  index.js  –  Bot APSEN (whatsapp-web.js)
 // ---------------------------------------------------------------
+const fs = require('fs');
+const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const config = require('./config');
@@ -11,6 +13,30 @@ const listGroup = require('./modules/list_group');
 const todolist = require('./modules/todolist');
 
 const prefix = config.BOT_PREFIX;
+
+/* ------------------------------------------------------------------
+   Hapus lock Chromium yang tertinggal di volume sesi.
+   Chromium menyimpan hostname+PID di SingletonLock; setelah container
+   dibuat ulang hostname berubah, sehingga Chromium mengira profil
+   sedang dipakai "komputer lain" dan menolak start (Code 21).
+------------------------------------------------------------------- */
+function removeStaleChromiumLocks(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (['SingletonLock', 'SingletonSocket', 'SingletonCookie'].includes(entry.name)) {
+      fs.rmSync(full, { force: true });
+    } else if (entry.isDirectory()) {
+      removeStaleChromiumLocks(full);
+    }
+  }
+}
+removeStaleChromiumLocks(path.resolve('.wwebjs_auth'));
 
 /* ------------------------------------------------------------------
    Inisialisasi client WhatsApp
