@@ -14,7 +14,7 @@ module.exports = {
   // Bot
   BOT_PREFIX: process.env.BOT_PREFIX || '!',
 
-  // Sheet Names
-  SHEET_GROUPS: 'Groups',
-  SHEET_TODOLIST: 'TodoList',
+  // Sheet Names — sesuai nama tab di Spreadsheet Anda
+  SHEET_GROUPS: 'grup',       // tab: grup   (kolom: group_id, group_name, registered_at)
+  SHEET_TODOLIST: 'todolist', // tab: todolist (kolom: Nomor, Nama, Deskripsi, Priority, Status, Category, TeamID, created_at)
 };

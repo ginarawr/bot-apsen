@@ -1,139 +1,185 @@
-// modules/list_group.js – Modul manajemen grup terhubung ke database Notion
+// modules/list_group.js – Manajemen registrasi grup
+// Alur: WA → Spreadsheet (sumber data) → Notion (sync/tampilan)
+//
+// Perintah (admin only = fromMe):
+//   !register | <nama tim>  /  !reg | <nama tim>   – daftar grup ini
+//   !hapus                                          – cabut/hapus grup ini
+//   !listgrup                                       – lihat semua grup terdaftar
+
 const config = require('../config');
+const sheet = require('../helpers/spreadsheet');
 const notionHelper = require('../helpers/notion');
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Cek apakah grup terdaftar di Notion dan Akses Bot bernilai "Diizinkan"
+ * Cek apakah grup terdaftar (baca dari Spreadsheet, fallback ke Notion).
  */
 async function isGroupRegistered(groupId) {
   if (!groupId) return false;
-  return await notionHelper.isGroupRegistered(groupId);
+  try {
+    const row = await sheet.getGroupById(groupId);
+    return !!row;
+  } catch {
+    // fallback: cek Notion
+    return notionHelper.isGroupRegistered(groupId);
+  }
 }
 
-/**
- * Handle perintah: daftar, hapus, listgrup
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  HANDLER PERINTAH
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function handleCommand(client, message, chat, chatId, isGroup) {
   const prefix = config.BOT_PREFIX;
   const body = message.body.trim();
 
-  // Hanya izinkan perintah manajemen grup dilakukan oleh akun Bot sendiri
+  // ── Admin check: hanya fromMe (nomor bot) ──
   if (!message.fromMe) {
     return client.sendMessage(
       chatId,
-      `⛔ Perintah *${body}* hanya dapat dilakukan oleh Admin Bot (Nomor Bot).`
+      `⛔ Perintah *${body.split(' ')[0]}* hanya dapat dilakukan oleh Admin Bot (Nomor Bot).`
     );
   }
 
   const groupId = isGroup ? chatId : null;
 
-  // ---- DAFTAR GRUP ----
-  if (body === `${prefix}daftar`) {
+  // ── !register | <nama tim>  atau  !reg | <nama tim> ──────────────────────
+  const isRegister =
+    body.toLowerCase().startsWith(`${prefix}register`) ||
+    body.toLowerCase().startsWith(`${prefix}reg`);
+
+  if (isRegister) {
     if (!groupId) {
       return client.sendMessage(chatId, '❌ Perintah ini hanya dapat dijalankan di dalam grup WhatsApp.');
     }
 
-    const groupName = chat?.name || 'Grup WhatsApp';
+    // Parse nama tim setelah tanda "|"
+    const pipeIdx = body.indexOf('|');
+    const teamName =
+      pipeIdx !== -1
+        ? body.slice(pipeIdx + 1).trim()
+        : chat?.name || 'Grup WhatsApp';
+
+    if (!teamName) {
+      return client.sendMessage(
+        chatId,
+        `⚠️ Format: *${prefix}register | Nama Tim*\nContoh: *${prefix}register | Tim AI*`
+      );
+    }
 
     try {
-      const res = await notionHelper.registerGroup(groupId, groupName);
+      // 1️⃣ Simpan/update ke Spreadsheet dulu
+      const { isNew } = await sheet.addGroup(groupId, teamName);
 
-      if (res.status === 'ALREADY_ALLOWED') {
-        return client.sendMessage(
-          chatId,
-          `✅ Grup *${res.groupName}* sudah terdaftar di Notion dengan status *Diizinkan*.`
-        );
+      // 2️⃣ Sync ke Notion
+      let notionStatus = '';
+      try {
+        const res = await notionHelper.registerGroup(groupId, teamName);
+        notionStatus = res.status;
+      } catch (notionErr) {
+        console.warn('[ListGroup] Notion sync gagal (data tetap tersimpan di Sheet):', notionErr.message);
       }
 
-      if (res.status === 'RE_ENABLED') {
+      if (!isNew) {
         return client.sendMessage(
           chatId,
-          `✅ Akses bot untuk grup *${res.groupName}* berhasil diaktifkan kembali (*Diizinkan*) di Notion!`
+          `ℹ️ Grup ini sudah terdaftar sebelumnya.\n` +
+          `• Nama Tim: *${teamName}*\n` +
+          `• Group ID: \`${groupId}\`\n` +
+          `💡 Gunakan *${prefix}hapus* untuk menghapus terlebih dahulu jika ingin ganti nama.`
         );
       }
 
       return client.sendMessage(
         chatId,
-        `✅ Grup *${res.groupName}* berhasil didaftarkan ke Notion!\n` +
-        `Status Akses: *Diizinkan*.\n` +
-        `Anggota grup sekarang dapat menggunakan seluruh fitur tugas tim.`
+        `✅ Grup berhasil didaftarkan!\n` +
+        `• Nama Tim: *${teamName}*\n` +
+        `• Group ID: \`${groupId}\`\n` +
+        `• Data disimpan di Spreadsheet${notionStatus ? ' & Notion' : ' (Notion: gagal sync)'}.`
       );
     } catch (err) {
-      console.error('[ListGroup] Gagal mendaftarkan grup ke Notion:', err);
-      return client.sendMessage(
-        chatId,
-        `❌ Gagal mendaftarkan grup ke Notion: ${err.message}`
-      );
+      console.error('[ListGroup] Gagal mendaftarkan grup:', err);
+      return client.sendMessage(chatId, `❌ Gagal mendaftarkan grup: ${err.message}`);
     }
   }
 
-  // ---- HAPUS / CABUT AKSES GRUP ----
+  // ── !hapus ────────────────────────────────────────────────────────────────
   if (body === `${prefix}hapus`) {
     if (!groupId) {
       return client.sendMessage(chatId, '❌ Perintah ini hanya dapat dijalankan di dalam grup WhatsApp.');
     }
 
     try {
-      const res = await notionHelper.revokeGroup(groupId);
+      // 1️⃣ Hapus dari Spreadsheet
+      const deleted = await sheet.removeGroup(groupId);
 
-      if (res.status === 'NOT_FOUND') {
-        return client.sendMessage(chatId, '❌ Grup ini belum terdaftar di database Notion.');
+      // 2️⃣ Cabut akses di Notion
+      let notionMsg = '';
+      try {
+        const res = await notionHelper.revokeGroup(groupId);
+        notionMsg = res.status !== 'NOT_FOUND' ? ' & Notion' : '';
+      } catch {}
+
+      if (!deleted) {
+        return client.sendMessage(chatId, '❌ Grup ini belum terdaftar di Spreadsheet.');
       }
 
       return client.sendMessage(
         chatId,
-        `✅ Akses bot untuk grup ini telah dicabut (Status diubah ke: *Dinonaktifkan*).\n` +
-        `💡 Data riwayat grup tetap tersimpan di Notion.`
+        `✅ Grup berhasil dihapus dari Spreadsheet${notionMsg}.\n` +
+        `💡 Anggota grup tidak lagi dapat menggunakan fitur bot.`
       );
     } catch (err) {
-      console.error('[ListGroup] Gagal mencabut akses grup di Notion:', err);
-      return client.sendMessage(
-        chatId,
-        `❌ Gagal mencabut akses grup di Notion: ${err.message}`
-      );
+      console.error('[ListGroup] Gagal menghapus grup:', err);
+      return client.sendMessage(chatId, `❌ Gagal menghapus grup: ${err.message}`);
     }
   }
 
-  // ---- LIHAT SEMUA GRUP ----
+  // ── !listgrup ─────────────────────────────────────────────────────────────
   if (body === `${prefix}listgrup`) {
     try {
-      const groups = await notionHelper.listAllGroups();
+      const rows = await sheet.getAllGroups();
 
-      if (!groups.length) {
-        return client.sendMessage(chatId, '📋 Belum ada grup yang terdaftar di database Notion.');
+      if (!rows.length) {
+        return client.sendMessage(chatId, '📋 Belum ada grup yang terdaftar di Spreadsheet.');
       }
 
-      const text = groups
-        .map((g, i) => {
-          const statusIcon = g.access.toLowerCase() === 'diizinkan' ? '🟢 Diizinkan' : '🔴 Dinonaktifkan';
-          return `${i + 1}. *${g.groupName}*\n` +
-                 `   ID: \`${g.groupId}\`\n` +
-                 `   Akses: ${statusIcon}`;
+      const text = rows
+        .map((r, i) => {
+          const id = r.get('group_id');
+          const name = r.get('group_name');
+          const regAt = r.get('registered_at')
+            ? new Date(r.get('registered_at')).toLocaleDateString('id-ID')
+            : '-';
+          return `${i + 1}. *${name}*\n   ID: \`${id}\`\n   Terdaftar: ${regAt}`;
         })
         .join('\n\n');
 
       return client.sendMessage(
         chatId,
-        `📋 *DAFTAR GRUP DI DATABASE NOTION:*\n━━━━━━━━━━━━━━━━━━━━━━\n\n${text}`
+        `📋 *DAFTAR GRUP TERDAFTAR (SPREADSHEET):*\n━━━━━━━━━━━━━━━━━━━━━━\n\n${text}`
       );
     } catch (err) {
-      console.error('[ListGroup] Gagal membaca daftar grup dari Notion:', err);
-      return client.sendMessage(
-        chatId,
-        `❌ Gagal membaca daftar grup dari Notion: ${err.message}`
-      );
+      console.error('[ListGroup] Gagal membaca daftar grup:', err);
+      return client.sendMessage(chatId, `❌ Gagal membaca daftar grup: ${err.message}`);
     }
   }
 }
 
-/**
- * Teks bantuan (menu)
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  MENU TEXT
+// ─────────────────────────────────────────────────────────────────────────────
+
 function helpText(prefix) {
-  return `👑 *KHUSUS BOT (ADMIN)*\n` +
-         `*${prefix}daftar* – Daftarkan grup ke Notion (Akses: Diizinkan)\n` +
-         `*${prefix}hapus* – Cabut akses grup (Status: Dinonaktifkan)\n` +
-         `*${prefix}listgrup* – Lihat seluruh grup terdaftar di Notion`;
+  return (
+    `👑 *KHUSUS BOT (ADMIN)*\n` +
+    `*${prefix}register | Nama Tim*  _(alias: ${prefix}reg)_  – Daftarkan grup ini\n` +
+    `*${prefix}hapus*  – Hapus/cabut akses grup ini\n` +
+    `*${prefix}listgrup*  – Lihat semua grup terdaftar`
+  );
 }
 
 module.exports = {

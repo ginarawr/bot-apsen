@@ -266,15 +266,23 @@ async function handleMessage(client, message) {
     return;
   }
 
-  // ---- MODUL LIST GROUP ----
-  const groupCmds = [`${prefix}daftar`, `${prefix}hapus`, `${prefix}listgrup`];
-  if (groupCmds.includes(body)) {
+  // ---- MODUL LIST GROUP (admin = fromMe) ----
+  // Perintah: !register | Nama Tim  /  !reg | Nama Tim  /  !hapus  /  !listgrup
+  const groupCmdPrefixes = [
+    `${prefix}register`,
+    `${prefix}reg`,
+    `${prefix}hapus`,
+    `${prefix}listgrup`,
+  ];
+  if (groupCmdPrefixes.some((c) => body === c || body.startsWith(`${c} `) || body.startsWith(`${c}|`))) {
     await listGroup.handleCommand(client, message, chat, chatId, isGroup);
     return;
   }
 
-  // ---- MODUL TODO LIST & PROGRESS NOTION ----
-  const todoCmds = [
+  // ---- MODUL TODO LIST & PROGRESS (Spreadsheet → Notion) ----
+  // Perintah lengkap + alias singkat
+  const todoCmdPrefixes = [
+    // Lengkap
     `${prefix}list`,
     `${prefix}task_list`,
     `${prefix}add`,
@@ -290,8 +298,16 @@ async function handleMessage(client, message) {
     `${prefix}progress`,
     `${prefix}report`,
     `${prefix}q`,
+    // Alias singkat
+    `${prefix}l`,   // !list
+    `${prefix}p`,   // !progress
+    `${prefix}d`,   // !done
+    `${prefix}u`,   // !undone
+    `${prefix}a`,   // !add
+    `${prefix}e`,   // !edit
+    `${prefix}rm`,  // !remove
   ];
-  if (todoCmds.some((c) => body === c || body.startsWith(`${c} `) || body.startsWith(`${c}\n`))) {
+  if (todoCmdPrefixes.some((c) => body === c || body.startsWith(`${c} `) || body.startsWith(`${c}\n`))) {
     await todolist.handleCommand(client, message, isRegistered, chatId, isGroup);
     return;
   }
@@ -301,9 +317,9 @@ async function handleMessage(client, message) {
    Generate teks menu utama dinamis
 ------------------------------------------------------------------- */
 function generateMenu(prefix, isBotOwner = false) {
-  let menu = '🤖 *BOT APSEN — MENU UTAMA (NOTION INTEGRATED)*\n';
+  let menu = '🤖 *BOT APSEN — MENU UTAMA*\n';
   menu += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
-  
+
   if (isBotOwner) {
     menu += listGroup.helpText(prefix) + '\n\n';
   }
@@ -311,8 +327,10 @@ function generateMenu(prefix, isBotOwner = false) {
   menu += todolist.helpText(prefix) + '\n\n';
   menu += '━━━━━━━━━━━━━━━━━━━━━━\n';
   menu += `💡 Ketik *${prefix}menu* untuk melihat menu lagi.\n`;
-  menu += `💡 Ketik *${prefix}add template* atau *${prefix}edit template* untuk contoh cepat.\n`;
-  menu += `💡 Ketik *${prefix}progress* atau *${prefix}q gimana progress Tim?* untuk laporan tim.\n`;
-  menu += '⚠️ Grup harus *terdaftar & berstatus Diizinkan* di Notion untuk menggunakan fitur bot.';
+  menu += `💡 Ketik *${prefix}add template* atau *${prefix}edit template* untuk contoh format.\n`;
+  menu += `💡 Ketik *${prefix}progress* atau *${prefix}q gimana progress Tim?* untuk laporan.\n`;
+  if (!isBotOwner) {
+    menu += `⚠️ Grup harus *terdaftar* terlebih dahulu. Minta Admin Bot ketik *${prefix}register | Nama Tim*.`;
+  }
   return menu;
 }
