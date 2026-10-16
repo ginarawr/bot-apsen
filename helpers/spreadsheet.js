@@ -8,9 +8,62 @@ const config = require('../config');
 
 let doc = null;
 
+const HEADERS_GROUPS = ['group_id', 'group_name', 'registered_at'];
+const HEADERS_TODOLIST = ['Nomor', 'Nama', 'Deskripsi', 'Priority', 'Status', 'Category', 'TeamID', 'created_at'];
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  KONEKSI
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cari sheet berdasarkan nama tab.
+ * Pencocokan tidak case-sensitive, karena nama tab di Google Sheets sering
+ * ditulis berbeda (mis. tab "TodoList" sedangkan config menulis "todolist").
+ * @returns {GoogleSpreadsheetWorksheet|null}
+ */
+function findSheet(document, sheetName) {
+  const sheetsByTitle = document.sheetsByTitle || {};
+  if (sheetsByTitle[sheetName]) return sheetsByTitle[sheetName];
+
+  const wanted = String(sheetName).toLowerCase();
+  return Object.values(sheetsByTitle).find((s) => s.title.toLowerCase() === wanted) || null;
+}
+
+/**
+ * Sama seperti findSheet, tapi melempar error yang jelas kalau tab tidak ada
+ * (dulu mengembalikan undefined sehingga error-nya menyesatkan:
+ * "Cannot read properties of undefined (reading 'getRows')").
+ */
+function resolveSheet(document, sheetName) {
+  const sheet = findSheet(document, sheetName);
+  if (sheet) return sheet;
+
+  const available = Object.keys(document.sheetsByTitle || {}).map((t) => `"${t}"`).join(', ');
+  throw new Error(
+    `Tab "${sheetName}" tidak ada di Spreadsheet "${document.title}". ` +
+    `Tab yang tersedia: ${available || '(tidak ada)'}. ` +
+    `Perbaiki nama tab atau nilai SHEET_* di config.js.`
+  );
+}
+
+/**
+ * Pastikan satu tab ada beserta header-nya (buat kalau belum ada).
+ */
+async function ensureSheet(document, title, headerValues) {
+  const existing = findSheet(document, title);
+  if (existing) {
+    try {
+      await existing.loadHeaderRow();
+    } catch {
+      await existing.setHeaderRow(headerValues);
+    }
+    return existing;
+  }
+
+  const created = await document.addSheet({ title, headerValues });
+  console.log(`[Spreadsheet] Tab "${title}" dibuat.`);
+  return created;
+}
 
 /**
  * Inisialisasi koneksi ke Google Spreadsheet dan pastikan header tab sudah ada.
@@ -24,38 +77,18 @@ async function initSpreadsheet() {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
-  doc = new GoogleSpreadsheet(config.SPREADSHEET_ID, auth);
-  await doc.loadInfo();
-  console.log(`[Spreadsheet] Terhubung ke: ${doc.title}`);
+  // Pakai variabel lokal dulu: kalau inisialisasi gagal di tengah jalan,
+  // cache `doc` tidak ikut terisi objek setengah jadi (dulu itu membuat semua
+  // perintah berikutnya gagal dengan error yang tidak jelas).
+  const document = new GoogleSpreadsheet(config.SPREADSHEET_ID, auth);
+  await document.loadInfo();
+  console.log(`[Spreadsheet] Terhubung ke: ${document.title}`);
 
-  // Pastikan tab "grup" ada
-  let grupSheet = doc.sheetsByTitle[config.SHEET_GROUPS];
-  if (!grupSheet) {
-    grupSheet = await doc.addSheet({
-      title: config.SHEET_GROUPS,
-      headerValues: ['group_id', 'group_name', 'registered_at'],
-    });
-    console.log(`[Spreadsheet] Tab "${config.SHEET_GROUPS}" dibuat.`);
-  } else {
-    try { await grupSheet.loadHeaderRow(); } catch {
-      await grupSheet.setHeaderRow(['group_id', 'group_name', 'registered_at']);
-    }
-  }
+  // Pastikan tab "grup" dan "todolist" ada
+  await ensureSheet(document, config.SHEET_GROUPS, HEADERS_GROUPS);
+  await ensureSheet(document, config.SHEET_TODOLIST, HEADERS_TODOLIST);
 
-  // Pastikan tab "todolist" ada
-  let todoSheet = doc.sheetsByTitle[config.SHEET_TODOLIST];
-  if (!todoSheet) {
-    todoSheet = await doc.addSheet({
-      title: config.SHEET_TODOLIST,
-      headerValues: ['Nomor', 'Nama', 'Deskripsi', 'Priority', 'Status', 'Category', 'TeamID', 'created_at'],
-    });
-    console.log(`[Spreadsheet] Tab "${config.SHEET_TODOLIST}" dibuat.`);
-  } else {
-    try { await todoSheet.loadHeaderRow(); } catch {
-      await todoSheet.setHeaderRow(['Nomor', 'Nama', 'Deskripsi', 'Priority', 'Status', 'Category', 'TeamID', 'created_at']);
-    }
-  }
-
+  doc = document;
   return doc;
 }
 
@@ -64,7 +97,7 @@ async function initSpreadsheet() {
  */
 async function getSheet(sheetName) {
   const document = await initSpreadsheet();
-  return document.sheetsByTitle[sheetName];
+  return resolveSheet(document, sheetName);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
